@@ -541,6 +541,9 @@ public class CustomAuthorizationFilter extends OncePerRequestFilter {
 ```java
 @Override
 protected void configure(HttpSecurity http) throws Exception {
+    CustomerAuthenticationFilter customerAuthenticationFilter = new CustomerAuthenticationFilter(authenticationManagerBean());
+    customerAuthenticationFilter.setFilterProcessesUrl("/api/login");
+    
     http.csrf().disable();
     http.sessionManagement().sessionCreationPolicy(STATELESS);
     http.authorizeRequests().antMatchers("/login").permitAll();
@@ -552,3 +555,72 @@ protected void configure(HttpSecurity http) throws Exception {
 }
 ```
 
+## Refresh JWT
+
+### create API for `refresh`
+
+```java
+@GetMapping("/token/refresh")
+public void refreshToken(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    String authorizationHeader = request.getHeader(AUTHORIZATION);
+    if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+        try {
+            String refresh_token = authorizationHeader.substring("Bearer ".length());
+            Algorithm algorithm = Algorithm.HMAC256("secret".getBytes());
+            JWTVerifier verifier = JWT.require(algorithm).build();
+            DecodedJWT decodedJWT = verifier.verify(refresh_token);
+            String username = decodedJWT.getSubject();
+            User user = userService.getUser(username);
+            String access_token = JWT.create()
+                .withSubject(user.getUsername())
+                .withExpiresAt(new Date(System.currentTimeMillis() + 10 * 60 * 1000))
+                .withIssuer(request.getRequestURI())
+                .withClaim("roles", user.getRoles().stream().map(Role::getName).collect(Collectors.toList()))
+                .sign(algorithm);
+            Map<String, String> tokens = new HashMap<>();
+            tokens.put("access_token", access_token);
+            tokens.put("refresh_token", refresh_token);
+            response.setContentType(APPLICATION_JSON_VALUE);
+            new ObjectMapper().writeValue(response.getOutputStream(), tokens);
+        } catch (Exception exception) {
+            response.setHeader("error", exception.getMessage());
+            response.setStatus(FORBIDDEN.value());
+            //response.sendError(FORBIDDEN.value());
+            Map<String, String> error = new HashMap<>();
+            error.put("error_message", exception.getMessage());
+            response.setContentType(APPLICATION_JSON_VALUE);
+            new ObjectMapper().writeValue(response.getOutputStream(), error);
+        }
+    } else {
+        throw new RuntimeException("Refresh token is missing");
+    }
+}
+```
+
+### configure the filter
+
+- SecurityConfig
+  ```java
+  @Override
+  protected void configure(HttpSecurity http) throws Exception {
+      CustomerAuthenticationFilter customerAuthenticationFilter = new CustomerAuthenticationFilter(authenticationManagerBean());
+      customerAuthenticationFilter.setFilterProcessesUrl("/api/login");
+      http.csrf().disable();
+      http.sessionManagement().sessionCreationPolicy(STATELESS);
+      http.authorizeRequests().antMatchers("/api/login/**", "/api/token/refresh/**").permitAll();
+      http.authorizeRequests().antMatchers(GET, "/api/user/**").hasAnyAuthority("ROLE_USER");
+      http.authorizeRequests().antMatchers(POST, "/api/user/save/**").hasAnyAuthority("ROLE_ADMIN");
+      http.authorizeRequests().anyRequest().authenticated();
+      http.addFilter(customerAuthenticationFilter);
+      http.addFilterBefore(new CustomAuthorizationFilter(), UsernamePasswordAuthenticationFilter.class);
+  }
+  ```
+
+- CustomAuthorizationFilter
+  ```java
+  if (request.getServletPath().equals("/api/login") || request.getServletPath().equals("/api/token/refresh")) {
+      filterChain.doFilter(request, response);
+  } 
+  ```
+
+  
