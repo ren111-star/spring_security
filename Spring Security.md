@@ -240,3 +240,134 @@ public class UserserviceApplication {
 }
 ```
 
+```java
+[
+    {"id":5,"name":"John Travolta","username":"john","password":"1234","roles":[
+        {"id":1,"name":"ROLE_USER"},
+        {"id":2,"name":"ROLE_MANAGER"}
+    ]},
+    {"id":6,"name":"Will Smith","username":"will","password":"1234","roles":[
+        {"id":2,"name":"ROLE_MANAGER"}
+    ]},
+    {"id":7,"name":"Jim Carry","username":"jim","password":"1234","roles":[
+        {"id":3,"name":"ROLE_ADMIN"}
+    ]},
+    {"id":8,"name":"Arnold Schwarzenegger","username":"arnold","password":"1234","roles":[
+        {"id":4,"name":"ROLE_SUPER_ADMIN"},
+        {"id":3,"name":"ROLE_ADMIN"},
+        {"id":1,"name":"ROLE_USER"}]}
+]
+```
+
+## Spring Security
+
+### frame in `SecurityConfig`
+
+```java
+@Configuration 
+@EnableWebSecurity 
+@RequiredArgsConstructor
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    private final UserDetailsService userDetailsService;
+    private final BCryptPasswordEncoder bCryptPasswordEncoder;
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService).passwordEncoder(bCryptPasswordEncoder);
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        super.configure(http);
+    }
+}
+```
+
+### add `passwordEncoder` to Main
+
+```java
+@Bean
+PasswordEncoder passwordEncoder () {
+    return new BCryptPasswordEncoder();
+}
+```
+
+### Add permission
+
+```java
+public class UserServiceImpl implements UserService, UserDetailsService {
+    private final UserRepo userRepo;
+    private final RoleRepo roleRepo;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepo.findByUsername(username);
+        if (user == null) {
+            log.error("User not found in the database");
+            throw new UsernameNotFoundException("User not fount in the database");
+        } else {
+            log.info("User found in the database: {}", username);
+        }
+        Collection<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        user.getRoles().forEach(role -> {
+            authorities.add(new SimpleGrantedAuthority(role.getName()));
+        });
+        return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), authorities);
+    }
+}
+```
+
+## Authentication and Authorization
+
+![image-20220908153016815](Spring Security.assets/image-20220908153016815.png)
+
+### add filter in `SecurityConfig`
+
+```java
+@Configuration @EnableWebSecurity @RequiredArgsConstructor
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    ...
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.csrf().disable();
+        http.sessionManagement().sessionCreationPolicy(STATELESS);
+        http.authorizeRequests().anyRequest().permitAll();
+        http.addFilter(new CustomerAuthenticationFilter(authenticationManagerBean()));
+    }
+
+    @Bean
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+}
+```
+
+### Configure filters
+
+```java
+@Slf4j
+public class CustomerAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
+    private final AuthenticationManager authenticationManager;
+
+    public CustomerAuthenticationFilter(AuthenticationManager authenticationManager) {
+        this.authenticationManager = authenticationManager;
+    }
+    @Override
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException {
+        String username = request.getParameter("username");
+        String password = request.getParameter("password");
+        log.info("Username is: {}", username);
+        log.info("Password is: {}", password);
+        UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(username, password);
+        return authenticationManager.authenticate(authenticationToken);
+    }
+
+    @Override
+    protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain, Authentication authResult) throws IOException, ServletException {
+        super.successfulAuthentication(request, response, chain, authResult);
+    }
+}
+```
+
