@@ -1,4 +1,6 @@
-# Spring Boot and Spring Security with JWT including Access and Refresh Tokens 
+># Spring Boot and Spring Security with JWT including Access and Refresh Tokens 
+
+
 
 ## Spring Boot Backend
 
@@ -368,6 +370,185 @@ public class CustomerAuthenticationFilter extends UsernamePasswordAuthentication
     protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain, Authentication authResult) throws IOException, ServletException {
         super.successfulAuthentication(request, response, chain, authResult);
     }
+}
+```
+
+## JWT
+
+> security with JSON Web Token
+
+### import jwt dependencies
+
+```xml
+<dependency>
+    <groupId>com.auth0</groupId>
+    <artifactId>java-jwt</artifactId>
+    <version>4.0.0</version>
+</dependency>
+```
+
+### Wrap in `CustomerAuthenticationFilter`
+
+> wrap the successfully verified jwt and configuration information
+
+```java
+@Override
+protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain, Authentication authentication) throws IOException, ServletException {
+    User user = (User) authentication.getPrincipal();
+    Algorithm algorithm = Algorithm.HMAC256("secret".getBytes());
+    String access_token = JWT.create()
+        .withSubject(user.getUsername())
+        .withExpiresAt(new Date(System.currentTimeMillis() + 10 * 60 * 1000))
+        .withIssuer(request.getRequestURI())
+        .withClaim("roles", user.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toList()))
+        .sign(algorithm);
+    String refresh_token = JWT.create()
+        .withSubject(user.getUsername())
+        .withExpiresAt(new Date(System.currentTimeMillis() + 30 * 60 * 1000))
+        .withIssuer(request.getRequestURI())
+        .sign(algorithm);
+    
+    //response.setHeader("access_token", access_token);
+    //response.setHeader("refresh_token", refresh_token);
+    Map<String, String> tokens = new HashMap<>();
+        tokens.put("access_token", access_token);
+        tokens.put("refresh_token", refresh_token);
+        response.setContentType(APPLICATION_JSON_VALUE);
+        new ObjectMapper().writeValue(response.getOutputStream(), tokens);
+}
+```
+
+### encode password before save user in `UserServiceImpl`
+
+```java
+private final PasswordEncoder passwordEncoder;
+
+@Override
+public User saveUser (User user) {
+    log.info("Saving new user {} to the database", user.getName());
+    user.setPassword(passwordEncoder.encode(user.getPassword()));
+    return userRepo.save(user);
+}
+```
+
+### add filter for user
+
+```java
+@Configuration @EnableWebSecurity @RequiredArgsConstructor
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    private final UserDetailsService userDetailsService;
+    private final BCryptPasswordEncoder bCryptPasswordEncoder;
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService).passwordEncoder(bCryptPasswordEncoder);
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.csrf().disable();
+        http.sessionManagement().sessionCreationPolicy(STATELESS);
+        http.authorizeRequests().antMatchers("/login").permitAll();
+        http.authorizeRequests().antMatchers(GET, "/api/user/**").hasAnyAuthority("ROLE_USER");
+        http.authorizeRequests().antMatchers(POST, "/api/user/save/**").hasAnyAuthority("ROLE_ADMIN");
+        http.authorizeRequests().anyRequest().authenticated();
+        http.addFilter(new CustomerAuthenticationFilter(authenticationManagerBean()));
+    }
+
+    @Bean
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+}
+```
+
+### Obtain permissions and filter through jwt
+
+```java
+package io.getarrays.userservice.security.filter;
+
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.JWTVerifier;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+
+import static java.util.Arrays.stream;
+import static org.springframework.http.HttpHeaders.AUTHORIZATION;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
+import static org.springframework.util.MimeTypeUtils.APPLICATION_JSON_VALUE;
+
+@Slf4j
+public class CustomAuthorizationFilter extends OncePerRequestFilter {
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        if (request.getServletPath().equals("/api/login")) {
+            filterChain.doFilter(request, response);
+        } else {
+            String authorizationHeader = request.getHeader(AUTHORIZATION);
+            if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+                try {
+                    String token = authorizationHeader.substring("Bearer ".length());
+                    Algorithm algorithm = Algorithm.HMAC256("secret".getBytes());
+                    JWTVerifier verifier = JWT.require(algorithm).build();
+                    DecodedJWT decodedJWT = verifier.verify(token);
+                    String username = decodedJWT.getSubject();
+                    String[] roles = decodedJWT.getClaim("roles").asArray(String.class);
+                    Collection<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                    stream(roles).forEach(role -> {
+                        authorities.add(new SimpleGrantedAuthority(role));
+                    });
+                    UsernamePasswordAuthenticationToken authenticationToken
+                            = new UsernamePasswordAuthenticationToken(username, null, authorities);
+                    SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+                    filterChain.doFilter(request, response);
+                } catch (Exception exception) {
+                    log.error("Error logging in: {}", exception.getMessage());
+                    response.setHeader("error", exception.getMessage());
+                    response.setStatus(FORBIDDEN.value());
+                    //response.sendError(FORBIDDEN.value());
+                    Map<String, String> error = new HashMap<>();
+                    error.put("error_message", exception.getMessage());
+                    response.setContentType(APPLICATION_JSON_VALUE);
+                    new ObjectMapper().writeValue(response.getOutputStream(), error);
+                }
+            } else {
+                filterChain.doFilter(request, response);
+            }
+        }
+    }
+}
+```
+
+### put `CustomAuthorizationFilter` into `SecurityConfig`
+
+```java
+@Override
+protected void configure(HttpSecurity http) throws Exception {
+    http.csrf().disable();
+    http.sessionManagement().sessionCreationPolicy(STATELESS);
+    http.authorizeRequests().antMatchers("/login").permitAll();
+    http.authorizeRequests().antMatchers(GET, "/api/user/**").hasAnyAuthority("ROLE_USER");
+    http.authorizeRequests().antMatchers(POST, "/api/user/save/**").hasAnyAuthority("ROLE_ADMIN");
+    http.authorizeRequests().anyRequest().authenticated();
+    http.addFilter(new CustomerAuthenticationFilter(authenticationManagerBean()));
+    http.addFilterBefore(new CustomAuthorizationFilter(), UsernamePasswordAuthenticationFilter.class);
 }
 ```
 
