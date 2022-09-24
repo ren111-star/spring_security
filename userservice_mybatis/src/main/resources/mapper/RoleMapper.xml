@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//muybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.getarrays.userservice.repo.RoleRepo">
+
+    <select id="findByName" resultType="io.getarrays.userservice.domain.Role">
+        select * from userservice.role where name = #{name}
+    </select>
+</mapper>

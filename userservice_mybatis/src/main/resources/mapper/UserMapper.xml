@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//muybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.getarrays.userservice.repo.UserRepo">
+
+    <resultMap id="userAndRoles" type="io.getarrays.userservice.domain.User">
+        <id property="id" column="id" />
+        <result property="name" column="name" />
+        <result property="password" column="password" />
+        <result property="username" column="username" />
+        <collection property="roles" ofType="io.getarrays.userservice.domain.Role" >
+            <id property="id" column="id" />
+            <result property="name" column="name" />
+        </collection>
+    </resultMap>
+
+    <select id="findByUsername" resultMap="userAndRoles">
+        select * from userservice.user u
+            left outer join userservice.user_roles ur on u.id=ur.user_id
+            left outer join userservice.role r on ur.roles_id=r.id
+                 where u.username = #{username}
+    </select>
+
+    <insert id="insertUser" useGeneratedKeys="true" keyProperty="id"  parameterType="io.getarrays.userservice.domain.User">
+        insert into userservice.user (id, name, username, password)
+        values (null, #{name}, #{username}, #{password});
+    </insert>
+
+    <insert id="addRoleToUserById">
+        insert into userservice.user_roles(user_id, roles_id) values (#{user_id}, #{roles_id})
+    </insert>
+
+    <select id="findAll" resultMap="userAndRoles">
+        select * from userservice.user u
+                          left outer join userservice.user_roles ur on u.id=ur.user_id
+                          right outer join userservice.role r on ur.roles_id=r.id
+    </select>
+</mapper>
