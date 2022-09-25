@@ -10,7 +10,7 @@
 
 ### Database
 
-#### domain
+#### domain(pojo)
 
 - User
   ```java
@@ -40,7 +40,7 @@
   }
   ```
 
-#### repo
+#### repo (or mapper)
 
 - RoleRepo
   ```java
@@ -56,7 +56,7 @@
   }
   ```
 
-#### service and `Impl`
+#### service and its Implement
 
 - `UserService`
 
@@ -110,8 +110,9 @@
   }
   ```
 
-
 #### `log4j`
+
+> we use `log4j` to help us to debug 
 
 ```java
 public class UserServiceImpl implements UserService{
@@ -139,7 +140,7 @@ public class UserServiceImpl implements UserService{
     }
 
     @Override
-    public User getUser(String username) {
+    public User getUser(String username) {  // get User by username
         log.info("Fetching user {}", username);
         return userRepo.findByUsername(username);
     }
@@ -152,7 +153,9 @@ public class UserServiceImpl implements UserService{
 }
 ```
 
-#### create `api`
+#### create `api`(or controller)
+
+> the `@RequiredArgsConstructor` annotation can help us add Service to the definition of the constructor, its role is equivalent to `@Autowired`, but with higher security. It should be noted that the final keyword needs to be added when we inject the Service
 
 ```java
 @RestController
@@ -169,7 +172,7 @@ public class UserResource {
    @PostMapping("/user/save")
    public ResponseEntity<User> saveUser(@RequestBody User user) {
        URI uri = URI.create(ServletUriComponentsBuilder.fromCurrentContextPath().path("/api/user/save").toUriString());
-       return ResponseEntity.created(uri).body(userService.saveUser(user));
+       return ResponseEntity.created(uri).body(userService.saveUser(user)); // the status 201 is better than 200
    }
 
     @PostMapping("/role/save")
@@ -275,6 +278,13 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Override
     protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        /*
+        UserDetailsService is used by DaoAuthenticationProvider for retrieving a username, password, and other attributes for authenticating with a username and password.
+        */
+        
+        /*
+        We just need to throw userDetailsService inside and use its passwordEncoder method to tell it whitch password encryption method we used.
+        */
         auth.userDetailsService(userDetailsService).passwordEncoder(bCryptPasswordEncoder);
     }
 
@@ -287,6 +297,12 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
 ### add `passwordEncoder` to Main
 
+> what's `@Bean` ?
+>
+> Spring's @Bean annotation is used to tell the method to generate a Bean object, which is then handed over to Spring for management. The method that generates the Bean object will only be called once by Spring, and then the Spring will put the Bean object in its own IOC container.
+>
+> To put it simply, when we inject the class where @Bean is located, the method marked by @Bean will be automatically called, the returned object will be obtained, and then it will be passed to the injected class.
+
 ```java
 @Bean
 PasswordEncoder passwordEncoder () {
@@ -295,6 +311,8 @@ PasswordEncoder passwordEncoder () {
 ```
 
 ### Add permission
+
+>We need to override the `loadUserByUsername(String username)` method of `UserDetaisService`, and we can tell spring what the permissions of the user include by returning a User object from `org.springframework.security.core.userdetails`.
 
 ```java
 public class UserServiceImpl implements UserService, UserDetailsService {
@@ -324,6 +342,10 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 ![image-20220908153016815](Spring Security.assets/image-20220908153016815.png)
 
 ### add filter in `SecurityConfig`
+
+> what's `csrf()`
+>
+> Our recommendation is to use CSRF protection for any request that could be processed by a browser by normal users. **If you are only creating a service that is used by non-browser clients, you will likely want to disable CSRF protection.**
 
 ```java
 @Configuration @EnableWebSecurity @RequiredArgsConstructor

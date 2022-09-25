@@ -11,11 +11,8 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -50,7 +47,7 @@ public class CustomerAuthenticationFilter extends UsernamePasswordAuthentication
         String access_token = JWT.create()
                 .withSubject(user.getUsername())
                 .withExpiresAt(new Date(System.currentTimeMillis() + 10 * 60 * 1000))
-                .withIssuer(request.getRequestURI())
+                .withIssuer(request.getRequestURI())  //:TODO 复杂的函数
                 .withClaim("roles", user.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toList()))
                 .sign(algorithm);
         String refresh_token = JWT.create()

@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.authentication.configurers.userdetails.DaoAuthenticationConfigurer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
@@ -27,7 +28,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
     @Override
     protected void configure(AuthenticationManagerBuilder auth) throws Exception {
-        auth.userDetailsService(userDetailsService).passwordEncoder(bCryptPasswordEncoder);
+        DaoAuthenticationConfigurer<AuthenticationManagerBuilder, UserDetailsService> configurer = auth.userDetailsService(userDetailsService);
+        configurer.passwordEncoder(bCryptPasswordEncoder);
     }
 
     @Override
@@ -37,7 +39,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         http.csrf().disable();
         http.sessionManagement().sessionCreationPolicy(STATELESS);
         http.authorizeRequests().antMatchers("/api/login/**", "/api/token/refresh/**").permitAll();
-        http.authorizeRequests().antMatchers(GET, "/api/user/**").hasAnyAuthority("ROLE_USER");
+        http.authorizeRequests().antMatchers(GET, "/api/user/**","/api/getinfo").hasAnyAuthority("ROLE_USER");
         http.authorizeRequests().antMatchers(POST, "/api/user/save/**").hasAnyAuthority("ROLE_ADMIN");
         http.authorizeRequests().anyRequest().authenticated();
         http.addFilter(customerAuthenticationFilter);

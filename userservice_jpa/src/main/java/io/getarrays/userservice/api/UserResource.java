@@ -39,6 +39,18 @@ public class UserResource {
         return ResponseEntity.ok().body(userService.getUsers());
     }
 
+    @GetMapping("/getinfo")
+    public ResponseEntity<User> getUserByToken(HttpServletRequest request) {
+        String jwt = request.getHeader(AUTHORIZATION);
+        String token = jwt.substring("Bearer ".length());
+        Algorithm algorithm = Algorithm.HMAC256("secret".getBytes());
+        JWTVerifier verifier = JWT.require(algorithm).build();
+        DecodedJWT decodedJWT = verifier.verify(token);
+        String username = decodedJWT.getSubject();
+        User user = userService.getUser(username);
+        return ResponseEntity.ok().body(user);
+    }
+
    @PostMapping("/user/save")
    public ResponseEntity<User> saveUser(@RequestBody User user) {
        URI uri = URI.create(ServletUriComponentsBuilder.fromCurrentContextPath().path("/api/user/save").toUriString());
