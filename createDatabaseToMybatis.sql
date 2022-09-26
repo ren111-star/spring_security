@@ -1,22 +1,21 @@
-create table hibernate_sequence
-(
-    next_val bigint null
-);
-
 create table role
 (
-    id   bigint       not null
+    id   bigint auto_increment
         primary key,
-    name varchar(255) null
+    name varchar(255) null,
+    constraint id
+        unique (id)
 );
 
 create table user
 (
-    id       bigint       not null
+    id       bigint auto_increment
         primary key,
     name     varchar(255) null,
     password varchar(255) null,
-    username varchar(255) null
+    username varchar(255) null,
+    constraint id
+        unique (id)
 );
 
 create table user_roles

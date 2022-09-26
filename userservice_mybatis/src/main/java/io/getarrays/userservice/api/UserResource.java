@@ -10,6 +10,8 @@ import io.getarrays.userservice.domain.User;
 import io.getarrays.userservice.service.UserService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -31,6 +33,7 @@ import static org.springframework.util.MimeTypeUtils.APPLICATION_JSON_VALUE;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Slf4j
 public class UserResource {
     private final UserService userService;
 
@@ -39,17 +42,32 @@ public class UserResource {
         return ResponseEntity.ok().body(userService.getUsers());
     }
 
-   @PostMapping("/user/save")
-   public ResponseEntity<User> saveUser(@RequestBody User user) {
-       URI uri = URI.create(ServletUriComponentsBuilder.fromCurrentContextPath().path("/api/user/save").toUriString());
-       return ResponseEntity.created(uri).body(userService.saveUser(user));
-   }
+    @GetMapping("/user/getinfo")
+    public ResponseEntity<User> getUserByToken(HttpServletRequest request) {
+        log.info("---------------------------------success");
+        String jwt = request.getHeader(AUTHORIZATION);
+        String token = jwt.substring("Bearer ".length());
+        Algorithm algorithm = Algorithm.HMAC256("secret".getBytes());
+        JWTVerifier verifier = JWT.require(algorithm).build();
+        DecodedJWT decodedJWT = verifier.verify(token);
+        String username = decodedJWT.getSubject();
+        User user = userService.getUser(username);
+        return ResponseEntity.ok().body(user);
+    }
+
+    @PostMapping("/user/save")
+    public ResponseEntity<User> saveUser(@RequestParam Map<String, String> data) {
+        URI uri = URI.create(ServletUriComponentsBuilder.fromCurrentContextPath().path("/api/user/save").toUriString());
+        return ResponseEntity.created(uri).body(userService.saveUser(data));
+    }
 
     @PostMapping("/role/save")
     public ResponseEntity<Role> saveRole(@RequestBody Role role) {
+        System.out.println(role.toString());
         URI uri = URI.create(ServletUriComponentsBuilder.fromCurrentContextPath().path("/api/role/save").toUriString());
         return ResponseEntity.created(uri).body(userService.saveRole(role));
     }
+
 
     @PostMapping("/role/addtouser")
     public ResponseEntity<?> saveRoleToUser(@RequestBody RoleToUserForm form) {
@@ -93,6 +111,7 @@ public class UserResource {
         }
     }
 }
+
 @Data
 class RoleToUserForm {
     private String username;

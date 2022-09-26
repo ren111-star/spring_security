@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -40,12 +41,17 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         Collection<SimpleGrantedAuthority> authorities = new ArrayList<>();
         user.getRoles().forEach(role -> {
             authorities.add(new SimpleGrantedAuthority(role.getName()));
+            log.info("success catch roles, {}", role.getName());
         });
         return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), authorities);
     }
 
     @Override
-    public User saveUser(User user) {
+    public User saveUser(Map<String, String> data) {
+        String name = data.get("name");
+        String username = data.get("username");
+        String password = data.get("password");
+        User user = new User(null, name, username, password, new ArrayList<>());
         log.info("Saving new user {} to the database", user.getName());
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         userRepo.insertUser(user);
@@ -58,6 +64,8 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     @Override
     public Role saveRole(Role role) {
         log.info("Saving new role {} to the database", role.getName());
+        System.out.println("------------------------------------------------");
+        System.out.println(role);
         roleRepo.insert(role);
         return role;
     }
